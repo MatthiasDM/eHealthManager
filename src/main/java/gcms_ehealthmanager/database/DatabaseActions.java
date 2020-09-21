@@ -162,6 +162,23 @@ public class DatabaseActions {
         return viewPath;
     }
 
+    public static String getFileAsString(String _fileName) {
+        String output = "";
+        try {
+            MongoDatabase database = databases.get("ehealthbox_files");
+            GridFSBucket gridBucket = GridFSBuckets.create(database);
+
+            //FileOutputStream fileOutputStream = new FileOutputStream(outputPath);
+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+            gridBucket.downloadToStream(_fileName, byteArrayOutputStream);
+            output = new String(byteArrayOutputStream.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+            byteArrayOutputStream.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return output;
+    }
+
     public static String downloadFileToDir(String _fileName, String dir) {
         if (!Core.checkFile(_fileName)) {
             String extension = Core.getExtension(_fileName);

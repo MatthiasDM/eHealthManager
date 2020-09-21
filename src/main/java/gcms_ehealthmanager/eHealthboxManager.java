@@ -19,7 +19,10 @@ import be.fgov.ehealth.ehbox.consultation.protocol.v3.GetFullMessageResponse;
 import be.fgov.ehealth.ehbox.consultation.protocol.v3.GetMessageListResponseType;
 
 import be.fgov.ehealth.ehbox.consultation.protocol.v3.Message;
+import be.fgov.ehealth.ehbox.core.v3.CustomMetaType;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -34,7 +37,9 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalUnit;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.persistence.TemporalType;
@@ -52,6 +57,8 @@ public class eHealthboxManager {
 
     public static String checkMessages() throws ConnectorException, JsonProcessingException, IOException, AuthenticationException, ClassNotFoundException {
         ObjectMapper mapper = new ObjectMapper();
+        mapper.setSerializationInclusion(Include.NON_NULL);
+
         ObjectNode jsonData = mapper.createObjectNode();
         String source = "INBOX";
         GetMessageListResponseType response = ServiceFactory.getEhealthBoxServiceV3().getMessageList(BuilderFactory.getRequestBuilder().createGetMessagesListRequest(source));
@@ -68,13 +75,20 @@ public class eHealthboxManager {
                 messageObject.setDate(Instant.now().toEpochMilli());//message.getMessageInfo().getPublicationDate().getMillis()));
                 messageObject.setTitle(message.getContentInfo().getTitle());
                 messageObject.setSender(message.getSender().getName() + " " + message.getSender().getFirstName() + " - " + message.getSender().getId());
+                Map<String, String> metas = new HashMap<>();
+                for (CustomMetaType customMetaType : message.getCustomMetas()) {
+                    metas.put(customMetaType.getKey(), customMetaType.getValue());
+                }
+                messageObject.setCustomMetas(metas);                
                 MessageObjectWithAnnexes fullMessage = getFullMessage("INBOX", message.getMessageId());
-                messageObject.setMessage(fullMessage.getMessageObject().getMessage());
-                messageObject.setFreetext(fullMessage.getFullMessageResponse().getFreeText());
-                messageObject.setPatient(fullMessage.getFullMessageResponse().getPatientInss());
-                messageObject.setFileNames(fullMessage.getMessageObject().getFileNames());
-                fullMessage.setMessageObject(messageObject);
-                Core.saveMessageObjectWithAnnexes(fullMessage);
+                if (fullMessage != null) {
+                    messageObject.setMessage(fullMessage.getMessageObject().getMessage());
+                    messageObject.setFreetext(fullMessage.getFullMessageResponse().getFreeText());
+                    messageObject.setPatient(fullMessage.getFullMessageResponse().getPatientInss());
+                    messageObject.setFileNames(fullMessage.getMessageObject().getFileNames());
+                    fullMessage.setMessageObject(messageObject);
+                    Core.saveMessageObjectWithAnnexes(fullMessage);
+                }
             }
 
             messages.add(mapper.writeValueAsString(message));
@@ -85,15 +99,33 @@ public class eHealthboxManager {
 
     public static String getMessages(int page, int rows, BasicDBObject filterObject) throws ClassNotFoundException, JsonProcessingException {
         ObjectMapper mapper = new ObjectMapper();
+        mapper.setSerializationInclusion(Include.NON_NULL);
+        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
         ArrayList<org.bson.Document> messages = DatabaseActions.getObjectsSpecificList("ehealthbox", "gcms_ehealthmanager.database.MessageObject", filterObject, new BasicDBObject("date", -1), rows, new String[]{"message"}, page, rows);
-              ObjectNode jsonData = mapper.createObjectNode();
-                ObjectNode jsonParameters = mapper.createObjectNode();
-                Long records = DatabaseActions.getObjectCount("ehealthbox", "gcms_ehealthmanager.database.MessageObject", filterObject);
-                int total = records.intValue() / rows;
-                jsonParameters.put("records", records);
-                jsonParameters.put("page", page);
-                jsonParameters.put("total", total);
-                jsonParameters.putPOJO("rows", (messages));
+        ArrayList<MessageObject> messagesObjects = mapper.readValue(mapper.writeValueAsString(messages), new TypeReference<ArrayList<MessageObject>>() { });
+        ObjectNode jsonData = mapper.createObjectNode();
+        ObjectNode jsonParameters = mapper.createObjectNode();
+        Long records = DatabaseActions.getObjectCount("ehealthbox", "gcms_ehealthmanager.database.MessageObject", filterObject);
+        int total = records.intValue() / rows;
+
+        try {
+            if (mapper.writeValueAsString(filterObject).contains("COVID")) {             
+                for(MessageObject messageObject: messagesObjects){
+                    String xmlFile = messageObject.getFileNames().stream().filter(f -> f.contains(".xml")).findFirst().get();
+                     Logger.getLogger(eHealthboxManager.class.getName()).log(Level.INFO, xmlFile);
+                    Map<String,String> customMetas = messageObject.getCustomMetas();
+                    customMetas.put("xml", DatabaseActions.getFileAsString(messageObject.getMessageId() + "-" + xmlFile));
+                    messageObject.setCustomMetas(customMetas);                       
+                }
+            }
+        } catch (Exception e) {
+            Logger.getLogger(eHealthboxManager.class.getName()).log(Level.SEVERE, e.getMessage());
+        }
+
+        jsonParameters.put("records", records);
+        jsonParameters.put("page", page);
+        jsonParameters.put("total", total);
+        jsonParameters.putPOJO("rows", (messagesObjects));
 //        { 
 //  "total": "xxx", 
 //  "page": "yyy", 
@@ -118,6 +150,7 @@ public class eHealthboxManager {
         MessageObjectWithAnnexes messageObjectWithAnnexes = new MessageObjectWithAnnexes();
         messageObjectWithAnnexes.setMessageObject(new MessageObject());
         ObjectMapper mapper = new ObjectMapper();
+        mapper.setSerializationInclusion(Include.NON_NULL);
         mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
         consultBuilder = BuilderFactory.getConsultationMessageBuilder();
         MarshallerHelper<GetFullMessageResponse, GetFullMessageResponse> helper = new MarshallerHelper<>(GetFullMessageResponse.class, GetFullMessageResponse.class);
@@ -136,17 +169,25 @@ public class eHealthboxManager {
             messageObjectWithAnnexes.setAnnexes(Core.getFilesFromFullMessage(message));
             // messageObjectWithAnnexes.getMessageObject().setMessage(fullMessageArray);
             messageObjectWithAnnexes.getMessageObject().setFileNames(new ArrayList<>(messageObjectWithAnnexes.getAnnexes().keySet()));
-
+            messageObjectWithAnnexes.getMessageObject().getCustomMetas().put("sample", getSampleNumberFromCovidRequest(messageObjectWithAnnexes));
+    
             //String fileName = Core.saveMessageWithAnnexes(messageObjectWithAnnexes);
             return messageObjectWithAnnexes;
         } catch (ConnectorException ex) {
+            ex.printStackTrace();
             Logger.getLogger(eHealthboxManager.class.getName()).log(Level.SEVERE, null, ex);
         }
         return null;
     }
 
+    public static String getSampleNumberFromCovidRequest(MessageObjectWithAnnexes messageObjectWithAnnexes){
+    return "";
+    
+    }
+    
     public static String dumpFiles(String regex, String outputDir, int dumpPeriod) throws ClassNotFoundException, JsonProcessingException {
         ObjectMapper mapper = new ObjectMapper();
+        mapper.setSerializationInclusion(Include.NON_NULL);
         Bson filter = Filters.and(
                 Filters.gt("upload_date", Instant.now().minus(dumpPeriod, ChronoUnit.MINUTES).toEpochMilli()),
                 Filters.regex("fileid", regex));

@@ -10,6 +10,7 @@ import be.fgov.ehealth.ehbox.consultation.protocol.v3.GetFullMessageResponse;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.bson.codecs.pojo.annotations.BsonProperty;
 
 /**
@@ -25,9 +26,10 @@ public class MessageObject {
     String messageId;
     String title, sender, freetext, patient;
     String type, status;
+    Map<String, String> customMetas;
     long date;
 
-    public MessageObject(List<String> fileNames, String message, String messageId, String title, String sender, String freetext, String patient, String type, String status, long date) {
+    public MessageObject(List<String> fileNames, String message, String messageId, String title, String sender, String freetext, String patient, String type, String status, Map<String, String> customMetas, long date) {
         this.fileNames = fileNames;
         this.message = message;
         this.messageId = messageId;
@@ -37,8 +39,19 @@ public class MessageObject {
         this.patient = patient;
         this.type = type;
         this.status = status;
+        this.customMetas = customMetas;
         this.date = date;
     }
+
+    public Map<String, String> getCustomMetas() {
+        return customMetas;
+    }
+
+    public void setCustomMetas(Map<String, String> customMetas) {
+        this.customMetas = customMetas;
+    }
+
+   
     
     
 

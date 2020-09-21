@@ -46,11 +46,13 @@ import org.apache.http.auth.AuthenticationException;
 public class Servlet extends HttpServlet {
 
     private ServletContext context;
+    eHealthSessionManager sessionManager;
 
     @Override
     public void init(ServletConfig config) throws ServletException {
         super.init(); //To change body of generated methods, choose Tools | Templates.
         this.context = config.getServletContext();
+        sessionManager = new eHealthSessionManager();
     }
 
     @Override
@@ -61,7 +63,7 @@ public class Servlet extends HttpServlet {
             Response actionResponse = null;
             ActionManager aM;
             String tempURL = context.getRealPath("/temp");
-            aM = new ActionManager(request, tempURL);
+            aM = new ActionManager(request, tempURL, sessionManager);
             actionResponse = aM.startAction();
             sb.append(actionResponse.sb);
 
@@ -75,6 +77,8 @@ public class Servlet extends HttpServlet {
             }
         } catch (ClassNotFoundException | ConnectorException | JsonProcessingException | AuthenticationException | NoSuchFieldException ex) {
             Logger.getLogger(Servlet.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (Exception ex) {
+            Logger.getLogger(Servlet.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 
@@ -86,7 +90,7 @@ public class Servlet extends HttpServlet {
             Response actionResponse = null;
             ActionManager aM;
             String tempURL = context.getRealPath("/temp");
-            aM = new ActionManager(request, tempURL);
+            aM = new ActionManager(request, tempURL, sessionManager);
             actionResponse = aM.startAction();
             sb.append(actionResponse.sb);
 
@@ -99,6 +103,8 @@ public class Servlet extends HttpServlet {
                 response.setStatus(actionResponse.responseStatus);
             }
         } catch (ClassNotFoundException | ConnectorException | JsonProcessingException | AuthenticationException | NoSuchFieldException ex) {
+            Logger.getLogger(Servlet.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (Exception ex) {
             Logger.getLogger(Servlet.class.getName()).log(Level.SEVERE, null, ex);
         }
 
@@ -112,7 +118,7 @@ public class Servlet extends HttpServlet {
             Response actionResponse = null;
             ActionManager aM;
             String tempURL = context.getRealPath("/temp");
-            aM = new ActionManager(request, tempURL);
+            aM = new ActionManager(request, tempURL, sessionManager);
             actionResponse = aM.startAction();
             sb.append(actionResponse.sb);
 
@@ -125,6 +131,8 @@ public class Servlet extends HttpServlet {
                 response.setStatus(actionResponse.responseStatus);
             }
         } catch (ClassNotFoundException | ConnectorException | JsonProcessingException | AuthenticationException | NoSuchFieldException ex) {
+            Logger.getLogger(Servlet.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (Exception ex) {
             Logger.getLogger(Servlet.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
@@ -174,14 +182,16 @@ public class Servlet extends HttpServlet {
         int urlStartIndex = 2;
         String method;
         List<String> pathVariableMap;
+        eHealthSessionManager sessionManager;
 
-        public ActionManager(HttpServletRequest request, String tempURL) throws ClassNotFoundException {
+        public ActionManager(HttpServletRequest request, String tempURL, eHealthSessionManager sessionManager) throws ClassNotFoundException {
             this.requestParameters = request.getParameterMap();
             this.URI = request.getRequestURL().toString();
             this.baseURL = Core.getBaseUrl(request);
             this.tempURL = tempURL;
             this.method = request.getMethod();
             this.pathVariableMap = Core.getPathParamtersFromUrl(URI);
+            this.sessionManager = sessionManager;
             if (requestParameters.get("LCMS_session") != null) {
                 cookie = requestParameters.get("LCMS_session")[0];
             }
@@ -201,9 +211,7 @@ public class Servlet extends HttpServlet {
             return variable;
         }
 
-        
-        
-        public Response startAction() throws ClassNotFoundException, IOException, NoSuchFieldException, ConnectorException, JsonProcessingException, AuthenticationException {
+        public Response startAction() throws ClassNotFoundException, IOException, NoSuchFieldException, ConnectorException, JsonProcessingException, AuthenticationException, Exception {
             StringBuilder sb = new StringBuilder();
             String pathVariable = null;
             if (Core.getProp(requestParameters.get("key")[0]).equals("1")) {
@@ -212,11 +220,11 @@ public class Servlet extends HttpServlet {
                     if (method.equals("GET")) {
                         int page = requestParameters.get("page") != null ? Integer.parseInt(requestParameters.get("page")[0]) : 1;
                         int rows = requestParameters.get("rows") != null ? Integer.parseInt(requestParameters.get("rows")[0]) : 50;
-                        BasicDBObject filterObject  = DatabaseActions.createFilterObject(requestParameters.get("filters"));
+                        BasicDBObject filterObject = DatabaseActions.createFilterObject(requestParameters.get("filters"));
                         sb.append(eHealthboxManager.getMessages(page, rows, filterObject));
                     } else {
                         if (method.equals("PUT")) {
-                            eHealthSessionManager sessionManager = new eHealthSessionManager();
+
                             if (sessionManager.start_session()) {
                                 sb.append(eHealthboxManager.checkMessages());
                                 //sb.append("Testomgeving checking messages success");
@@ -250,6 +258,26 @@ public class Servlet extends HttpServlet {
                         sb.append(eHealthboxManager.dumpFiles(regex, dir, period));
                     }
                 }
+
+                if (pathVariable.equals("rr")) {
+                    if (method.equals("GET")) {
+                        if (sessionManager.start_session()) {
+                            String ssin = nextVariable();
+                            String response = ConsultRRManager.SearchPersonBySsin(ssin);
+                            sb.append(response);
+                        }
+                    }
+                }
+                if (pathVariable.equals("nihii")) {
+                    if (method.equals("GET")) {
+                        if (sessionManager.start_session()) {
+                            String nihii = nextVariable();
+                            String response = AddressbookManager.getProfessionalContactInfo(nihii);
+                            sb.append(response);
+                        }
+                    }
+                }
+
             }
 
             //sb.append("succes");

@@ -84,15 +84,24 @@ public class eHealthSessionManager {
 
             Map<String, String> keystores = new HashMap<String, String>(3);
             //  valid_session = sessionmgmt.hasValidSession();
-            if (!valid_session) {
-                sessionmgmt.unloadSession();
-                sessionmgmt.createFallbackSession(Core.getProp("ehealth.hokpassword"), Core.getProp("ehealth.hokpassword"), Core.getProp("ehealth.hokpassword"));
+
+          
+            if (!sessionmgmt.hasValidSession()) {
+                sessionmgmt.createFallbackSession(Core.getProp("ehealth.hokpassword"), Core.getProp("ehealth.hokpassword"));
             } else {
-                //if (DynamicSwing.infoBox("A Session already exists, do you want to close the old session and create a new one?", "Session already exists") == 0) {
-                //   sessionmgmt.unloadSession();
-                //  sessionmgmt.createFallbackSession(hokPassword, hokPassword, hokPassword);
-                //}
+               // sessionmgmt.unloadSession();
+                //sessionmgmt.createFallbackSession(Core.getProp("ehealth.hokpassword"), Core.getProp("ehealth.hokpassword"));
             }
+
+//            if (!valid_session) {
+//                sessionmgmt.unloadSession();
+//                sessionmgmt.createFallbackSession(Core.getProp("ehealth.hokpassword"), Core.getProp("ehealth.hokpassword"), Core.getProp("ehealth.hokpassword"));
+//            } else {
+//                //if (DynamicSwing.infoBox("A Session already exists, do you want to close the old session and create a new one?", "Session already exists") == 0) {
+//                //   sessionmgmt.unloadSession();
+//                //  sessionmgmt.createFallbackSession(hokPassword, hokPassword, hokPassword);
+//                //}
+//            }
             valid_session = sessionmgmt.hasValidSession();
         } catch (SessionManagementException ex) {
             Logger.getLogger(eHealthSessionManager.class.getName()).log(Level.SEVERE, null, ex);
